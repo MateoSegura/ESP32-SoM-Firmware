@@ -15,9 +15,15 @@
 #define MICROS_TIMESTAMP_ENABLED false // Set to true to enabled microsecond time stamp in terminal messages
 #define SYSTEM_TIME_ENABLED false      // Set to true if using a real time clock. Refer to "rtc_example.cpp" for more
 
+// BLE Service
+#define BLE_NAME "Bluetooth Server Example"
+#define SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" // UART service UUID
+#define CHARACTERISTIC_UUID "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+
 SystemOnChip esp;
 Terminal terminal;
 EMMC_Memory emmc;
+BluetoothLowEnergyServer bleServer;
 
 SX1509 io_expansion;
 AD7689 adc;
@@ -32,6 +38,125 @@ public:
   bool initEMMC();
 
 } SoM;
+
+class MyServerCallbacks : public BLEServerCallbacks
+{
+  // -- On client connect
+  void onConnect(BLEServer *pServer)
+  {
+    bleServer.onClientConnect();
+    terminal.printMessage(TerminalMessage("Client connected", "BLE", INFO, micros()));
+  };
+
+  // -- On client disconnect
+  void onDisconnect(BLEServer *pServer)
+  {
+    bleServer.onClientDisconnect();
+    terminal.printMessage(TerminalMessage("Client disconnected", "BLE", INFO, micros()));
+
+    delay(200); // Allow some time for the server to stat advertising again
+    bleServer.startAdvertising();
+    terminal.printMessage(TerminalMessage("Bluetooth server is advertising", "BLE", INFO, micros()));
+  }
+} ServerCallbacks;
+
+class MyCallbacks : public BLECharacteristicCallbacks
+{
+  void onWrite(BLECharacteristic *pCharacteristic)
+  {
+    std::string rxValue = pCharacteristic->getValue();
+
+    String incoming_bluetooth_message = "Incoming data (size: ";
+    incoming_bluetooth_message += rxValue.length();
+    incoming_bluetooth_message += ") -> ";
+
+    // Store incoming message in string
+    if (rxValue.length() > 0)
+    {
+      for (int i = 0; i < rxValue.length(); i++)
+      {
+        incoming_bluetooth_message += rxValue[i];
+        // TODO: Handle your incoming data as you wish here
+      }
+      terminal.printMessage(TerminalMessage(incoming_bluetooth_message, "BLE", INFO, micros()));
+    }
+  }
+
+} CharacteristicCallbacks;
+
+//****************** Setup
+void setup()
+{
+  // 1. Init UART0(Serial)
+  esp.uart0.begin(UART0_BAUD_RATE);
+
+  // 2. Init Terminal
+  terminal.begin(esp.uart0, MICROS_TIMESTAMP_ENABLED, SYSTEM_TIME_ENABLED);
+  terminal.printBanner("Test App");
+
+  // 3. Init IO expansion
+  if (!SoM.initIOExpansion())
+  {
+    esp.uart0.println("\n\nStopping boot\n\n");
+    while (1)
+      ;
+  }
+
+  // 4. Init ADC
+  if (!SoM.initADC())
+  {
+    esp.uart0.println("\n\nStopping boot\n\n");
+    while (1)
+      ;
+  }
+
+  // 3. Init CAN
+  if (!SoM.initCAN())
+  {
+    esp.uart0.println("\n\nStopping boot\n\n");
+    while (1)
+      ;
+  }
+
+  // 3. Init eMMC
+  if (!SoM.initEMMC())
+  {
+    esp.uart0.println("\n\nStopping boot\n\n");
+    while (1)
+      ;
+  }
+
+  // 3. Init bluetooth server
+  long initial_time = micros();
+  bleServer.begin(BLE_NAME,
+                  SERVICE_UUID,
+                  CHARACTERISTIC_UUID,
+                  &ServerCallbacks,
+                  &CharacteristicCallbacks);
+
+  bleServer.startAdvertising();
+
+  terminal.printMessage(TerminalMessage("Bluetooth server is advertising", "BLE", INFO, micros(), micros() - initial_time));
+
+  // 4. Set MTU size. Max iOS size is 185 bytes (11KB/s)
+  ESP_ERROR mtu_set = bleServer.setMaxMTUsize(185); // -- Try to negotiate Max size MTU (iOS max. MTU is 185 bytes)
+
+  if (mtu_set.on_error) // Catch error
+  {
+    terminal.printMessage(TerminalMessage(mtu_set.debug_message, "MMC", ERROR, micros()));
+  }
+  else
+  {
+    terminal.printMessage(TerminalMessage("MTU size set to 185 bytes. Max throughput is ~ 11KB/s", "MMC", INFO, micros()));
+  }
+}
+
+//********************LOOP
+void loop()
+{
+}
+
+//******************** SoM Function definitions
 
 bool SystemOnModule::initIOExpansion()
 {
@@ -142,48 +267,4 @@ bool SystemOnModule::initEMMC()
                                         micros() - initial_time)); // How long did SD card take to init
 
   return true;
-}
-
-void setup()
-{
-  // 1. Init UART0(Serial)
-  esp.uart0.begin(UART0_BAUD_RATE);
-
-  esp.uart0.println("\n\n"); // The esp.uart0 object is the "Serial" object from Arduino. Refer to "soc_example.cpp" for more
-  esp.uart0.println("************************************************************************************************************");
-  esp.uart0.println("*                                       System on Chip Example                                             *");
-  esp.uart0.println("************************************************************************************************************");
-  esp.uart0.println("\n\n");
-
-  // 2. Init Terminal
-  terminal.begin(esp.uart0, MICROS_TIMESTAMP_ENABLED, SYSTEM_TIME_ENABLED);
-
-  // 3. Init IO expansion
-  if (!SoM.initIOExpansion())
-  {
-    esp.uart0.println("\n\nStopping boot\n\n");
-  }
-
-  // 4. Init ADC
-  if (!SoM.initADC())
-  {
-    esp.uart0.println("\n\nStopping boot\n\n");
-  }
-
-  // 3. Init CAN
-  if (!SoM.initCAN())
-  {
-    esp.uart0.println("\n\nStopping boot\n\n");
-  }
-
-  // 3. Init eMMC
-  if (!SoM.initEMMC())
-  {
-    esp.uart0.println("\n\nStopping boot\n\n");
-  }
-}
-
-//********************LOOP
-void loop()
-{
 }
