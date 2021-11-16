@@ -1,257 +1,212 @@
-// #include "som.h"
-// #include <ACAN2517FD.h>
+#include "som.h"
 
-// //* ESP32
-// SystemOnChip esp;
-// Terminal terminal;
-// SPIFFS_Memory spiffs;
-// EMMC_Memory emmc;
-// // BluetoothLowEnergyServer bleServer;
+SystemOnChip esp;
+Terminal terminal;
+EMMC_Memory emmc;
 
-// //* Peripherals
-// SX1509 ioExpansion;
-// RealTimeClock rtc;
-// Adafruit_NeoPixel ledStrip(0, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-// AD7689 adc;
-// ACAN2517FD can(CAN0_CONTROLLER_CS_PIN, esp.hspi, CAN0_CONTROLLER_INT_PIN);
+RealTimeClock rtc;
+SX1509 io_expansion;
+AD7689 adc;
+ACAN2517FD can(CAN0_CONTROLLER_CS_PIN, esp.hspi, CAN0_CONTROLLER_INT_PIN);
+Adafruit_NeoPixel pixels(2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
-// ESP_ERROR ESP32_SystemOnModule::begin(bool enable_debugging)
-// {
-//     ESP_ERROR err;
-//     long initial_time;
-//     debugging = enable_debugging;
+void IRAM_ATTR updateSystemTime()
+{
+    rtc.updateMillisecondsCounter(SoM.system_time);
+}
 
-//     // 1. Terminal
-//     esp.uart0.begin(UART0_BAUD_RATE);
-//     terminal.begin(esp.uart0);
-//     if (debugging)
-//         terminal.printMessage(TerminalMessage("Boot started", "   ", INFO, micros()));
+void SystemOnModule::onBootError()
+{
+    SoM.initLED();
+    pixels.setPixelColor(0, pixels.Color(100, 0, 0));
+    pixels.show();
+    terminal.println("\n\nStopping boot");
+    while (1)
+        ;
+}
 
-//     // 2. Init I/O expansion
-//     initial_time = micros();
-//     ESP_ERROR init_external_io = initIO_Expansion();
+void SystemOnModule::initAll(bool debug_enabled)
+{
+    long initial_time = millis();
 
-//     if (init_external_io.on_error)
-//     {
-//         while (1)
-//         {
-//             terminal.printMessage(TerminalMessage(init_external_io.debug_message, "   ", ERROR, micros()));
-//             delay(1000);
-//         }
-//     }
+    if (debug_enabled)
+        debugging_enabled = true;
 
-//     if (debugging)
-//         terminal.printMessage(TerminalMessage("I/O expansion initialized correctly", "   ", INFO, micros(),
-//                                               micros() - initial_time));
+    if (!initIOExpansion())
+        onBootError();
 
-//     // 3. Init ADC
-//     // initial_time = micros();
-//     // ESP_ERROR init_adc = initADC();
+    if (!initRTC())
+        onBootError();
 
-//     // if (init_adc.on_error)
-//     // {
-//     //     while (1)
-//     //     {
-//     //         terminal.printMessage(TerminalMessage(init_adc.debug_message, "   ", ERROR, micros()));
-//     //         delay(1000);
-//     //     }
-//     // }
+    if (!initADC())
+        onBootError();
 
-//     // if (debugging)
-//     //     terminal.printMessage(TerminalMessage("ADC initialized correctly", "   ", INFO, micros(),
-//     //                                           micros() - initial_time));
+    if (!initCAN())
+        onBootError();
 
-//     // 4. CAN bus
-// }
+    if (!initEMMC())
+        onBootError();
 
-// ESP_ERROR ESP32_SystemOnModule::initIO_Expansion()
-// {
-//     ESP_ERROR err;
+    initLED();
 
-//     long initial_time = micros();
-//     // 4. Init I / O expansion
-//     esp.i2c0.begin(I2C0_SDA, I2C0_SCL, I2C0_CLK_FREQUENCY);
-//     ESP_ERROR initialize_io_expansion = ioExpansion.begin(&esp.i2c0, IO_EXP_ADDRESS);
+    terminal.printMessage(TerminalMessage("Boot time: " + String(millis() - initial_time) + " mS", "SOM", INFO, micros()));
+}
 
-//     if (initialize_io_expansion.on_error) // Catch error
-//     {
-//         while (1)
-//         {
-//             terminal.printMessage(TerminalMessage(initialize_io_expansion.debug_message, "I/O", ERROR, micros()));
-//             delay(500);
-//         }
-//     }
+bool SystemOnModule::initIOExpansion()
+{
+    // 1. Begin I2C bus
+    esp.i2c0.begin(I2C0_SDA_PIN, I2C0_SCL_PIN, I2C0_CLK_FREQUENCY); // Refer to soc_example.cpp for information on this function
 
-//     terminal.printMessage(TerminalMessage("SX1509 External I/O initialized correctly", "I/O", ERROR, micros()));
+    // 2. Begin IO expansion SX1509
+    ESP_ERROR initialize_io_expansion = io_expansion.begin(&esp.i2c0, IO_EXP_ADDRESS);
 
-//     // 5v
-//     ioExpansion.pinMode(9, OUTPUT);
-//     ioExpansion.digitalWrite(9, HIGH);
+    if (initialize_io_expansion.on_error) // Catch error
+    {
+        terminal.printMessage(TerminalMessage(initialize_io_expansion.debug_message, "I/O", ERROR, micros()));
+        return false;
+    }
 
-//     // gnd debug
-//     ioExpansion.pinMode(GND_DEBUG_PIN, OUTPUT);
-//     ioExpansion.digitalWrite(GND_DEBUG_PIN, LOW);
+    io_expansion.pinMode(V3V3_OUT_PIN_A, OUTPUT);
+    io_expansion.digitalWrite(V3V3_OUT_PIN_A, HIGH);
+    io_expansion.pinMode(V3V3_OUT_PIN_B, OUTPUT);
+    io_expansion.digitalWrite(V3V3_OUT_PIN_B, HIGH); // 3.3V Out
 
-//     // 3.3v debug
-//     ioExpansion.pinMode(1, OUTPUT);
-//     ioExpansion.digitalWrite(1, HIGH);
+    // 3. Setup GPIOs
+    io_expansion.pinMode(V5V_EN_PIN, OUTPUT);
+    io_expansion.digitalWrite(V5V_EN_PIN, HIGH); // 5V Output
 
-//     // 3.3v out
-//     ioExpansion.pinMode(0, OUTPUT);
-//     ioExpansion.digitalWrite(0, HIGH);
-//     ioExpansion.pinMode(3, OUTPUT);
-//     ioExpansion.digitalWrite(3, HIGH);
+    if (debugging_enabled)
+    {
+        io_expansion.pinMode(V3V3_DEBUG_PIN, OUTPUT);
+        io_expansion.pinMode(GND_DEBUG_PIN, OUTPUT);
+        io_expansion.digitalWrite(GND_DEBUG_PIN, LOW);   // GND Debug
+        io_expansion.digitalWrite(V3V3_DEBUG_PIN, HIGH); // 3.3V Debug
+    }
 
-//     // adc
-//     ioExpansion.pinMode(4, OUTPUT);
-//     ioExpansion.digitalWrite(4, HIGH);
+    io_expansion.pinMode(ADC0_EN_PIN, OUTPUT);
+    io_expansion.digitalWrite(ADC0_EN_PIN, HIGH); // ADC
 
-//     ioExpansion.pinMode(5, OUTPUT);
-//     ioExpansion.digitalWrite(5, LOW);
+    io_expansion.pinMode(CAN0_EN_PIN, OUTPUT);
+    io_expansion.digitalWrite(CAN0_EN_PIN, LOW); // CAN
 
-//     vTaskDelay(200 / portTICK_PERIOD_MS);
+    terminal.printMessage(TerminalMessage("All systems enabled", "I/O", INFO, micros()));
 
-//     // 3. Begin SPI bus
-//     esp.vspi.begin(VSPI_CLCK_PIN, VSPI_MISO_PIN, VSPI_MOSI_PIN);
-//     esp.vspi.setFrequency(VSPI_CLCK_FREQUENCY);
+    return true;
+}
 
-//     // 4. Begin ADC
-//     adc.begin(ADC0_CS, esp.vspi, VSPI_CLCK_FREQUENCY);
+bool SystemOnModule::initRTC()
+{
+    long initial_time = micros();
 
-//     if (adc.selftest() == false)
-//     {
-//         terminal.printMessage(TerminalMessage("Error initializing ADC", "ADC", ERROR, micros()));
-//         while (1)
-//             ;
-//     }
+    ESP_ERROR initialize_rtc = rtc.begin(RealTimeClock::RV3028_IC, esp.i2c0);
 
-//     terminal.printMessage(TerminalMessage("ADC initialized correctly", "ADC", ERROR, micros()));
+    if (initialize_rtc.on_error)
+    {
+        terminal.printMessage(TerminalMessage(initialize_rtc.debug_message, "RTC", ERROR, micros()));
+        return false;
+    }
 
-//     // 3. Init HSPI bus
-//     esp.hspi.begin(HSPI_CLCK_PIN, HSPI_MISO_PIN, HSPI_MOSI_PIN);
+    if (debugging_enabled)
+    {
+        terminal.printMessage(TerminalMessage("RTC initialized", "RTC", INFO, micros(),
+                                              micros() - initial_time));
+    }
 
-//     // 4. Init CAN bus long initial_time = micros();
-//     ACAN2517FDSettings settings(ACAN2517FDSettings::OSC_40MHz, 1000 * 1000, DataBitRateFactor::x1);
+    // rtc.setToCompilerTime();
 
-//     settings.mDriverReceiveFIFOSize = 200;
+    system_time = rtc.getTime();
 
-//     const uint32_t error_code = can.begin(settings, []
-//                                           { can.isr(); });
+    terminal.setTimeKeeper(system_time);
 
-//     if (error_code != 0)
-//     {
-//         while (1)
-//         {
-//             terminal.printMessage(TerminalMessage("Could not initialize CAN controller. Check connections",
-//                                                   "WIF", ERROR, micros()));
-//             delay(500);
-//         }
-//     }
+    esp.timer0.setup();
+    esp.timer0.attachInterrupt(updateSystemTime);
+    esp.timer0.timerPeriodMilliseconds(1);
+    esp.timer0.enableInterrupt();
 
-//     terminal.printMessage(TerminalMessage("CAN controller initialized", "WIF", ERROR, micros(),
-//                                           micros() - initial_time));
+    return true;
+}
 
-//     // ESP_ERROR err;
+bool SystemOnModule::initADC()
+{
+    long initial_time = micros();
 
-//     // // 1. Init I2C bus & IO expansion
-//     // esp.i2c0.begin(I2C0_SDA, I2C0_SCL, I2C0_CLK_FREQUENCY);
-//     // ESP_ERROR init_io_exp = ioExpansion.begin(&esp.i2c0, IO_EXP_ADDRESS);
+    // 1. Begin SPI bus
+    esp.vspi.begin(VSPI_CLCK_PIN, VSPI_MISO_PIN, VSPI_MOSI_PIN);
+    esp.vspi.setFrequency(VSPI_CLCK_FREQUENCY);
 
-//     // if (init_io_exp.on_error)
-//     // {
-//     //     err.on_error = true;
-//     //     err.debug_message = "Could not initialize SX1509";
-//     //     return err;
-//     // }
+    // 2. Begin ADC
+    adc.begin(ADC0_CS, esp.vspi, VSPI_CLCK_FREQUENCY);
 
-//     // // // 2. Setup inputs
-//     // // ioExpansion.pinMode(eMMC0_CD_PIN, INPUT);
+    // 3. Run self test
+    if (adc.selftest() == false)
+    {
+        terminal.printMessage(TerminalMessage("Error initializing ADC", "ADC", ERROR, micros()));
+        return false;
+    }
 
-//     // // // 3 Setup debug outputs
-//     // // ioExpansion.pinMode(V3V3_OUT_PIN_A, OUTPUT);
-//     // // ioExpansion.pinMode(V3V3_OUT_PIN_B, OUTPUT);
-//     // // ioExpansion.pinMode(V3V3_DEBUG_PIN, OUTPUT);
-//     // // ioExpansion.pinMode(GND_DEBUG_PIN, OUTPUT);
+    if (debugging_enabled)
+    {
+        terminal.printMessage(TerminalMessage("ADC initialized", "ADC", INFO, micros(),
+                                              micros() - initial_time));
+    }
 
-//     // // if (debugging)
-//     // // {
-//     // //     ioExpansion.digitalWrite(V3V3_DEBUG_PIN, HIGH);
-//     // //     ioExpansion.digitalWrite(GND_DEBUG_PIN, LOW);
-//     // // }
-//     // // else
-//     // // {
-//     // //     ioExpansion.digitalWrite(V3V3_DEBUG_PIN, LOW);
-//     // //     ioExpansion.digitalWrite(GND_DEBUG_PIN, HIGH);
-//     // // }
+    return true;
+}
 
-//     // // // 4. 5V systems
-//     // // ioExpansion.pinMode(V5V_EN_PIN, OUTPUT);
-//     // // ioExpansion.digitalWrite(V5V_EN_PIN, HIGH);
+bool SystemOnModule::initCAN()
+{
+    long initial_time = micros();
 
-//     // // // 5. Turn off eMMC
-//     // // // pinMode(14, OUTPUT);
-//     // // // pinMode(15, OUTPUT);
-//     // // // pinMode(13, OUTPUT);
+    // 1. Init SPI bus
+    esp.hspi.begin(HSPI_CLCK_PIN, HSPI_MISO_PIN, HSPI_MOSI_PIN);
 
-//     // // // digitalWrite(13, LOW);
-//     // // // digitalWrite(14, LOW);
-//     // // // digitalWrite(15, LOW);
+    // 2. Set CAN settings
+    ACAN2517FDSettings settings(ACAN2517FDSettings::OSC_40MHz, 1000 * 1000, DataBitRateFactor::x1);
+    settings.mDriverReceiveFIFOSize = 200;
 
-//     // // // 5. ADC
-//     // // ioExpansion.pinMode(ADC0_EN_PIN, OUTPUT);
-//     // // ioExpansion.digitalWrite(ADC0_EN_PIN, HIGH);
+    // 3. Attempt to initialize
+    const uint32_t error_code = can.begin(settings, []
+                                          { can.isr(); });
 
-//     // // v5v_enabled = true;
+    if (error_code != 0)
+    {
+        terminal.printMessage(TerminalMessage("Could not initialize CAN controller. Error code: " + String(error_code),
+                                              "CAN", ERROR, micros()));
+        return false;
+    }
 
-//     // // 5v
-//     // ioExpansion.pinMode(9, OUTPUT);
-//     // ioExpansion.digitalWrite(9, HIGH);
+    if (debugging_enabled)
+    {
+        terminal.printMessage(TerminalMessage("CAN controller initialized", "CAN", INFO, micros(),
+                                              micros() - initial_time));
+    }
 
-//     // // gnd debug
-//     // ioExpansion.pinMode(GND_DEBUG_PIN, OUTPUT);
-//     // ioExpansion.digitalWrite(GND_DEBUG_PIN, LOW);
+    return true;
+}
 
-//     // // 3.3v debug
-//     // ioExpansion.pinMode(1, OUTPUT);
-//     // ioExpansion.digitalWrite(1, HIGH);
+bool SystemOnModule::initEMMC()
+{
+    long initial_time = micros();
+    ESP_ERROR initialize_emmc = emmc.begin(-1, -1, eMMC_MODE, MODE_1_BIT);
 
-//     // // 3.3v out
-//     // ioExpansion.pinMode(0, OUTPUT);
-//     // ioExpansion.digitalWrite(0, HIGH);
-//     // ioExpansion.pinMode(3, OUTPUT);
-//     // ioExpansion.digitalWrite(3, HIGH);
+    if (initialize_emmc.on_error)
+    {
+        terminal.printMessage(TerminalMessage(initialize_emmc.debug_message, "MMC", ERROR, micros()));
+        return false;
+    }
 
-//     // // adc
-//     // ioExpansion.pinMode(4, OUTPUT);
-//     // ioExpansion.digitalWrite(4, HIGH);
+    if (debugging_enabled)
+    {
+        terminal.printMessage(TerminalMessage("eMMC initialized", "MMC", INFO, micros(),
+                                              micros() - initial_time)); // How long did SD card take to init
+    }
 
-//     // ioExpansion.pinMode(5, OUTPUT);
-//     // ioExpansion.digitalWrite(5, LOW);
+    return true;
+}
 
-//     // vTaskDelay(200 / portTICK_PERIOD_MS);
-
-//     return err;
-// }
-
-// ESP_ERROR ESP32_SystemOnModule::initADC()
-// {
-//     // ESP_ERROR err;
-
-//     // // 1. Enable ADC
-
-//     // // 2. Begin VSPI bus
-//     // esp.vspi.begin(VSPI_CLCK_PIN, VSPI_MISO_PIN, VSPI_MOSI_PIN);
-//     // esp.vspi.setFrequency(VSPI_CLCK_FREQUENCY);
-
-//     // // 3. Init ADC
-//     // adc.begin(ADC0_CS, esp.vspi, VSPI_CLCK_FREQUENCY);
-
-//     // // // 4. Run self test
-//     // // if (adc.selftest() == false)
-//     // // {
-//     // //     err.on_error = true;
-//     // //     err.debug_message = "Could not initialize ADC";
-//     // // }
-
-//     // return err;
-// }
+void SystemOnModule::initLED()
+{
+    pixels.begin();
+    pixels.clear();
+    pixels.show();
+}
