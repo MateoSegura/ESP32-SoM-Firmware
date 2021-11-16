@@ -9,11 +9,17 @@
 #include <esp32_utilities.h>
 #include <system_on_module/settings/soc_pinout.h>
 #include <system_on_module/settings/soc_clk_freq.h>
+
 #include <ACAN2517FD.h>
+#include <Adafruit_NeoPixel.h>
+
+#define APP_NAME "Test App"
 
 #define UART0_BAUD_RATE 115200         // Set the baudrate of the terminal uart port
 #define MICROS_TIMESTAMP_ENABLED false // Set to true to enabled microsecond time stamp in terminal messages
-#define SYSTEM_TIME_ENABLED false      // Set to true if using a real time clock. Refer to "rtc_example.cpp" for more
+#define SYSTEM_TIME_ENABLED true       // Set to true if using a real time clock. Refer to "rtc_example.cpp" for more
+
+#define NUMPIXELS 2
 
 // BLE Service
 #define BLE_NAME "Bluetooth Server Example"
@@ -25,17 +31,32 @@ Terminal terminal;
 EMMC_Memory emmc;
 BluetoothLowEnergyServer bleServer;
 
+RealTimeClock rtc;
 SX1509 io_expansion;
 AD7689 adc;
 ACAN2517FD can(CAN0_CONTROLLER_CS_PIN, esp.hspi, CAN0_CONTROLLER_INT_PIN);
+Adafruit_NeoPixel pixels(NUMPIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 class SystemOnModule
 {
 public:
+  DateTime system_time;
+
+  void onBootError();
+
+  void initAll(bool debug_enabled);
+
   bool initIOExpansion();
+  bool initRTC();
   bool initADC();
   bool initCAN();
   bool initEMMC();
+  bool initLED();
+
+  bool initBLE();
+
+private:
+  bool debugging_enabled;
 
 } SoM;
 
@@ -84,79 +105,105 @@ class MyCallbacks : public BLECharacteristicCallbacks
 
 } CharacteristicCallbacks;
 
+//****************** Tasks
+QueueHandle_t io_expansion_interrupt_queue = NULL;
+uint16_t io_expansion_interrupt_queue_length = 10;
+
+void handleIO_ExpInterrupt(void *parameters);
+
+//****************** Interrupts
+void IRAM_ATTR updateSystemTime()
+{
+  rtc.updateMillisecondsCounter(SoM.system_time);
+}
+
+bool request = false;
+
+void IRAM_ATTR ioExpansionInterrupt()
+{
+  xQueueSend(io_expansion_interrupt_queue, (void *)&request, 0);
+}
+
 //****************** Setup
 void setup()
 {
-  // 1. Init UART0(Serial)
   esp.uart0.begin(UART0_BAUD_RATE);
 
-  // 2. Init Terminal
   terminal.begin(esp.uart0, MICROS_TIMESTAMP_ENABLED, SYSTEM_TIME_ENABLED);
-  terminal.printBanner("Test App");
+  terminal.printBanner(APP_NAME);
 
-  // 3. Init IO expansion
-  if (!SoM.initIOExpansion())
-  {
-    esp.uart0.println("\n\nStopping boot\n\n");
-    while (1)
-      ;
-  }
-
-  // 4. Init ADC
-  if (!SoM.initADC())
-  {
-    esp.uart0.println("\n\nStopping boot\n\n");
-    while (1)
-      ;
-  }
-
-  // 3. Init CAN
-  if (!SoM.initCAN())
-  {
-    esp.uart0.println("\n\nStopping boot\n\n");
-    while (1)
-      ;
-  }
-
-  // 3. Init eMMC
-  if (!SoM.initEMMC())
-  {
-    esp.uart0.println("\n\nStopping boot\n\n");
-    while (1)
-      ;
-  }
-
-  // 3. Init bluetooth server
-  long initial_time = micros();
-  bleServer.begin(BLE_NAME,
-                  SERVICE_UUID,
-                  CHARACTERISTIC_UUID,
-                  &ServerCallbacks,
-                  &CharacteristicCallbacks);
-
-  bleServer.startAdvertising();
-
-  terminal.printMessage(TerminalMessage("Bluetooth server is advertising", "BLE", INFO, micros(), micros() - initial_time));
-
-  // 4. Set MTU size. Max iOS size is 185 bytes (11KB/s)
-  ESP_ERROR mtu_set = bleServer.setMaxMTUsize(185); // -- Try to negotiate Max size MTU (iOS max. MTU is 185 bytes)
-
-  if (mtu_set.on_error) // Catch error
-  {
-    terminal.printMessage(TerminalMessage(mtu_set.debug_message, "MMC", ERROR, micros()));
-  }
-  else
-  {
-    terminal.printMessage(TerminalMessage("MTU size set to 185 bytes. Max throughput is ~ 11KB/s", "MMC", INFO, micros()));
-  }
+  SoM.initAll(true);
 }
 
 //********************LOOP
 void loop()
 {
+  delay(500);
+  pixels.setPixelColor(0, pixels.Color(10, 10, 10));
+  pixels.show();
+  delay(500);
+  pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+  pixels.show();
+}
+
+//******************** Tasks Definition
+void handleIO_ExpInterrupt(void *parameters)
+{
+  bool action;
+  while (1)
+  {
+    // Read if available first
+    if (xQueueReceive(io_expansion_interrupt_queue, (void *)&action, portMAX_DELAY) == pdTRUE)
+    {
+      long initial_time = micros();
+      int interrupt_pin = io_expansion.interruptSource(true);
+
+      terminal.printMessage(TerminalMessage("Pin: " + String(interrupt_pin),
+                                            "I/O", INFO, micros(), micros() - initial_time));
+
+      attachInterrupt(IO_EXPANSION_INT_PIN, ioExpansionInterrupt, FALLING);
+    }
+  }
 }
 
 //******************** SoM Function definitions
+void SystemOnModule::initAll(bool debug_enabled)
+{
+  long initial_time = millis();
+  debugging_enabled = debug_enabled;
+
+  if (!initIOExpansion())
+    onBootError();
+
+  if (!initRTC())
+    onBootError();
+
+  if (!initADC())
+    onBootError();
+
+  if (!initCAN())
+    onBootError();
+
+  if (!initEMMC())
+    onBootError();
+
+  initLED();
+
+  if (debug_enabled)
+  {
+    terminal.printMessage(TerminalMessage("Boot time: " + String(millis() - initial_time) + " mS", "SOM", INFO, micros()));
+  }
+}
+
+void SystemOnModule::onBootError()
+{
+  SoM.initLED();
+  pixels.setPixelColor(0, pixels.Color(100, 0, 0));
+  pixels.show();
+  terminal.println("\n\nStopping boot");
+  while (1)
+    ;
+}
 
 bool SystemOnModule::initIOExpansion()
 {
@@ -174,29 +221,84 @@ bool SystemOnModule::initIOExpansion()
     return false;
   }
 
-  terminal.printMessage(TerminalMessage("External I/O initialized", "I/O", INFO, micros(),
-                                        micros() - initial_time));
+  io_expansion.pinMode(V3V3_OUT_PIN_A, OUTPUT);
+  io_expansion.digitalWrite(V3V3_OUT_PIN_A, HIGH);
+  io_expansion.pinMode(V3V3_OUT_PIN_B, OUTPUT);
+  io_expansion.digitalWrite(V3V3_OUT_PIN_B, HIGH); // 3.3V Out
 
   // 3. Setup GPIOs
   io_expansion.pinMode(V5V_EN_PIN, OUTPUT);
   io_expansion.digitalWrite(V5V_EN_PIN, HIGH); // 5V Output
 
-  io_expansion.pinMode(GND_DEBUG_PIN, OUTPUT);
-  io_expansion.digitalWrite(GND_DEBUG_PIN, LOW); // GND Debug
+  if (debugging_enabled)
+  {
+    io_expansion.pinMode(GND_DEBUG_PIN, OUTPUT);
+    io_expansion.digitalWrite(GND_DEBUG_PIN, LOW); // GND Debug
 
-  io_expansion.pinMode(V3V3_DEBUG_PIN, OUTPUT);
-  io_expansion.digitalWrite(V3V3_DEBUG_PIN, HIGH); // 3.3V Debug
-
-  io_expansion.pinMode(V3V3_OUT_PIN_A, OUTPUT);
-  io_expansion.digitalWrite(V3V3_OUT_PIN_A, HIGH);
-  io_expansion.pinMode(V3V3_OUT_PIN_B, OUTPUT);
-  io_expansion.digitalWrite(V3V3_OUT_PIN_B, HIGH); // 3.3V Out
+    io_expansion.pinMode(V3V3_DEBUG_PIN, OUTPUT);
+    io_expansion.digitalWrite(V3V3_DEBUG_PIN, HIGH); // 3.3V Debug
+  }
 
   io_expansion.pinMode(ADC0_EN_PIN, OUTPUT);
   io_expansion.digitalWrite(ADC0_EN_PIN, HIGH); // ADC
 
   io_expansion.pinMode(CAN0_EN_PIN, OUTPUT);
   io_expansion.digitalWrite(CAN0_EN_PIN, LOW); // CAN
+
+  io_expansion.pinMode(eMMC0_CD_PIN, INPUT_PULLUP);
+  io_expansion.enableInterrupt(eMMC0_CD_PIN, FALLING);
+
+  io_expansion_interrupt_queue = xQueueCreate(io_expansion_interrupt_queue_length, sizeof(bool));
+
+  xTaskCreatePinnedToCore(
+      handleIO_ExpInterrupt,
+      "io handle",
+      3000,
+      nullptr,
+      25,
+      nullptr,
+      1);
+
+  pinMode(IO_EXPANSION_INT_PIN, INPUT);
+  attachInterrupt(IO_EXPANSION_INT_PIN, ioExpansionInterrupt, FALLING);
+
+  if (debugging_enabled)
+  {
+    terminal.printMessage(TerminalMessage("External I/O initialized", "I/O", INFO, micros(),
+                                          micros() - initial_time));
+  }
+
+  return true;
+}
+
+bool SystemOnModule::initRTC()
+{
+  long initial_time = micros();
+
+  ESP_ERROR initialize_rtc = rtc.begin(RealTimeClock::RV3028_IC, esp.i2c0);
+
+  if (initialize_rtc.on_error)
+  {
+    terminal.printMessage(TerminalMessage(initialize_rtc.debug_message, "RTC", ERROR, micros()));
+    return false;
+  }
+
+  if (debugging_enabled)
+  {
+    terminal.printMessage(TerminalMessage("RTC initialized", "RTC", INFO, micros(),
+                                          micros() - initial_time));
+  }
+
+  rtc.setToCompilerTime();
+
+  system_time = rtc.getTime();
+
+  terminal.setTimeKeeper(system_time);
+
+  esp.timer0.setup();
+  esp.timer0.attachInterrupt(updateSystemTime);
+  esp.timer0.timerPeriodMilliseconds(1);
+  esp.timer0.enableInterrupt();
 
   return true;
 }
@@ -219,8 +321,12 @@ bool SystemOnModule::initADC()
     return false;
   }
 
-  terminal.printMessage(TerminalMessage("ADC initialized", "ADC", INFO, micros(),
-                                        micros() - initial_time));
+  if (debugging_enabled)
+  {
+    terminal.printMessage(TerminalMessage("ADC initialized", "ADC", INFO, micros(),
+                                          micros() - initial_time));
+  }
+
   return true;
 }
 
@@ -246,8 +352,11 @@ bool SystemOnModule::initCAN()
     return false;
   }
 
-  terminal.printMessage(TerminalMessage("CAN controller initialized", "CAN", INFO, micros(),
-                                        micros() - initial_time));
+  if (debugging_enabled)
+  {
+    terminal.printMessage(TerminalMessage("CAN controller initialized", "CAN", INFO, micros(),
+                                          micros() - initial_time));
+  }
 
   return true;
 }
@@ -263,8 +372,47 @@ bool SystemOnModule::initEMMC()
     return false;
   }
 
-  terminal.printMessage(TerminalMessage("eMMC initialized", "MMC", INFO, micros(),
-                                        micros() - initial_time)); // How long did SD card take to init
+  if (debugging_enabled)
+  {
+    terminal.printMessage(TerminalMessage("eMMC initialized", "MMC", INFO, micros(),
+                                          micros() - initial_time)); // How long did SD card take to init
+  }
+
+  return true;
+}
+
+bool SystemOnModule::initLED()
+{
+  pixels.begin();
+  pixels.clear();
+  pixels.show();
+}
+
+bool SystemOnModule::initBLE()
+{
+  long initial_time = micros();
+  bleServer.begin(BLE_NAME,
+                  SERVICE_UUID,
+                  CHARACTERISTIC_UUID,
+                  &ServerCallbacks,
+                  &CharacteristicCallbacks);
+
+  bleServer.startAdvertising();
+
+  terminal.printMessage(TerminalMessage("Bluetooth server is advertising", "BLE", INFO, micros(), micros() - initial_time));
+
+  // 4. Set MTU size. Max iOS size is 185 bytes (11KB/s)
+  ESP_ERROR mtu_set = bleServer.setMaxMTUsize(185); // -- Try to negotiate Max size MTU (iOS max. MTU is 185 bytes)
+
+  if (mtu_set.on_error) // Catch error
+  {
+    terminal.printMessage(TerminalMessage(mtu_set.debug_message, "MMC", ERROR, micros()));
+    return false;
+  }
+  else
+  {
+    terminal.printMessage(TerminalMessage("MTU size set to 185 bytes. Max throughput is ~ 11KB/s", "MMC", INFO, micros()));
+  }
 
   return true;
 }
