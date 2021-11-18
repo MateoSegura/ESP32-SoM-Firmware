@@ -2,23 +2,21 @@
 
 #include "../som.h"
 
+//******** Data Logger settings
+#define NUMBER_OF_CHANNELS 8
+
 #define UART0_BAUD_RATE 115200
 #define MICROS_TIMESTAMP_ENABLED false
 #define SYSTEM_TIME_ENABLED true
-#define DEBUGGING_ENABLED false
+#define DEBUGGING_ENABLED true
 
-SystemOnModule SoM;
+void handleError(String debug_message, String system = "   ");
+void printMessage(String message, String system = "   ");
 
 class Application
 {
 public:
-    void begin()
-    {
-        esp.uart0.begin(UART0_BAUD_RATE);
-        terminal.begin(esp.uart0, MICROS_TIMESTAMP_ENABLED, SYSTEM_TIME_ENABLED);
-
-        SoM.initAll(DEBUGGING_ENABLED);
-    }
+    void begin();
 };
 
 extern Application app;
