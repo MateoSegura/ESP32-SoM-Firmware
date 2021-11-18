@@ -74,7 +74,7 @@ void LoggerData::toCSVLine()
     strcat(data, analog_ch_str);
     strcat(data, "\n");
 
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 4; i++)
     {
         strcat(data, timestamp_str);
         strcat(data, analog_ch_str);
