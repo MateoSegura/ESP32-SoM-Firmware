@@ -28,6 +28,7 @@ ESP_ERROR DataLogger::begin(DataLoggerSettings logger_settings)
     xTaskCreatePinnedToCore(simpleLogger, "Simple Log", 10000, nullptr, 1, nullptr, 1);
 }
 
+// TODO: Figure out how tf im gonna get this shit to work lol
 void sampleADC(void *parameters)
 {
     while (1)

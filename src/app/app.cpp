@@ -129,6 +129,7 @@ void i2cTest()
 
     delay(1000); // wait 5 seconds for next scan
 }
+
 // void runWriteTest()
 // {
 //     // 3. Attempt to write

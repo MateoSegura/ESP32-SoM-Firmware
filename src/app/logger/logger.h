@@ -13,7 +13,6 @@ struct DataLoggerSettings
         _250_Hz,
         _350_Hz,
         _500_Hz,
-
     };
 
     Frequency frequency;
