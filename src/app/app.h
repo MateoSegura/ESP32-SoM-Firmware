@@ -1,6 +1,8 @@
 #pragma once
 
-#include "../som.h"
+#include "som/som.h"
+#include "logger/logger.h"
+
 
 //******** Data Logger settings
 #define NUMBER_OF_CHANNELS 8
@@ -10,13 +12,16 @@
 #define SYSTEM_TIME_ENABLED true
 #define DEBUGGING_ENABLED true
 
-void handleError(String debug_message, String system = "   ");
-void printMessage(String message, String system = "   ");
-
+// ************* helpers
 class Application
 {
+private:
+    DataLogger data_logger;
+
 public:
     void begin();
+
+    ESP_ERROR initGPS();
 };
 
 extern Application app;

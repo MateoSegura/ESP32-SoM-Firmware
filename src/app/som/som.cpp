@@ -9,6 +9,7 @@ SX1509 io_expansion;
 AD7689 adc;
 ACAN2517FD can(CAN0_CONTROLLER_CS_PIN, esp.hspi, CAN0_CONTROLLER_INT_PIN);
 Adafruit_NeoPixel pixels(2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+SFE_UBLOX_GPS gps;
 
 void IRAM_ATTR updateSystemTime()
 {
@@ -23,6 +24,14 @@ void SystemOnModule::onBootError()
     terminal.println("\n\nStopping boot");
     while (1)
         ;
+}
+
+void SystemOnModule::initTimers()
+{
+    esp.timer0.setup();
+    esp.timer0.attachInterrupt(updateSystemTime);
+    esp.timer0.timerPeriodMilliseconds(1);
+    esp.timer0.enableInterrupt();
 }
 
 void SystemOnModule::initAll(bool debug_enabled)
@@ -47,6 +56,12 @@ void SystemOnModule::initAll(bool debug_enabled)
     if (!initEMMC())
         onBootError();
 
+    // TODO: Init IMU
+    esp.i2c1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, I2C1_CLK_FREQUENCY);
+
+    // TODO: Init Env. sensor
+
+    initTimers();
     initLED();
 
     terminal.printMessage(TerminalMessage("Boot time: " + String(millis() - initial_time) + " mS", "SOM", INFO, micros()));
@@ -118,11 +133,6 @@ bool SystemOnModule::initRTC()
 
     terminal.setTimeKeeper(system_time);
 
-    esp.timer0.setup();
-    esp.timer0.attachInterrupt(updateSystemTime);
-    esp.timer0.timerPeriodMilliseconds(1);
-    esp.timer0.enableInterrupt();
-
     return true;
 }
 
@@ -136,6 +146,7 @@ bool SystemOnModule::initADC()
 
     // 2. Begin ADC
     adc.begin(ADC0_CS, esp.vspi, VSPI_CLCK_FREQUENCY);
+    // adc.enableFiltering(true);
 
     // 3. Run self test
     if (adc.selftest() == false)
