@@ -51,6 +51,8 @@ class DataLogger
 {
 public:
     ESP_ERROR begin(DataLoggerSettings logger_settings);
+    //** RTOS
+    SemaphoreHandle_t sample_imu_semaphore;
 
 private:
     struct DataLoggerFile
@@ -60,7 +62,6 @@ private:
         uint32_t size;
     };
 
-    //** RTOS
     //*** Variables
     DataLoggerSettings settings;
     DataLoggerFile csv_file;
@@ -69,3 +70,5 @@ private:
     ESP_ERROR createCSV(DataLoggerFile &file);
     ESP_ERROR toCSVLine(DataLoggerChannels &channels);
 };
+
+extern DataLogger logger;

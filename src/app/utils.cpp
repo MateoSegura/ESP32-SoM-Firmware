@@ -15,11 +15,6 @@ void handleError(String message, String system)
     }
 }
 
-uint8_t cpu0_index = 0;
-uint8_t cpu1_index = 0;
-TerminalMessage message_queue_memory_cpu0[10];
-TerminalMessage message_queue_memory_cpu1[10];
-
 void printMessage(TerminalMessage &message, uint16_t wait_ticks)
 {
     xSemaphoreTake(app.debug_message_queue_mutex, wait_ticks);

@@ -2,6 +2,7 @@
 #include "utils.h"
 
 SystemOnModule SoM;
+DataLogger logger;
 
 void i2cTest();
 
@@ -36,7 +37,7 @@ void Application::begin()
     DataLoggerSettings logger_settings;
     logger_settings.frequency = DataLoggerSettings::_50_Hz;
 
-    data_logger.begin(logger_settings);
+    logger.begin(logger_settings);
 }
 
 ESP_ERROR Application::initGPS()

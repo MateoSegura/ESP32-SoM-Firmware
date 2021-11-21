@@ -14,8 +14,6 @@
 class Application
 {
 private:
-    DataLogger data_logger;
-
 public:
     //***** RTOS Stuff
     QueueHandle_t debug_message_queue = NULL;
@@ -30,4 +28,3 @@ public:
     ESP_ERROR initGPS();
 };
 extern Application app;
-

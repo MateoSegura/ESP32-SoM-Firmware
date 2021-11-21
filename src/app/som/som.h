@@ -8,6 +8,7 @@
 #include <ACAN2517FD.h>
 #include <Adafruit_NeoPixel.h>
 #include "SparkFun_Ublox_Arduino_Library.h"
+#include "mpu9250.h"
 
 extern SFE_UBLOX_GPS gps;
 extern SystemOnChip esp;
@@ -18,7 +19,7 @@ extern RealTimeClock rtc;
 extern SX1509 io_expansion;
 extern AD7689 adc;
 extern ACAN2517FD can;
-
+extern MPU9250 imu;
 extern Adafruit_NeoPixel pixels;
 
 class SystemOnModule
@@ -37,6 +38,7 @@ public:
     bool initRTC();
     bool initADC();
     bool initCAN();
+    bool initIMU();
     bool initEMMC();
     void initLED();
 

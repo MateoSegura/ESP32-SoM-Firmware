@@ -1,5 +1,7 @@
 #include "logger.h"
 
+bool debugging = true;
+
 //****** Filters
 MovingAverageFilter movingAverageFilter(20);
 
@@ -12,6 +14,9 @@ ESP_ERROR DataLogger::begin(DataLoggerSettings logger_settings)
     TerminalMessage message;
 
     long initial_time;
+
+    //* 1. Register RTOS
+    sample_imu_semaphore = xSemaphoreCreateBinary();
 
     //* 1. Create file name
     csv_file.name = "/test.csv";
@@ -47,30 +52,25 @@ void sampleADC(void *parameters)
 
         adc.readChannels(8, UNIPOLAR_MODE, raw_readings, &temp_reading);
 
-        adc_debug_message = TerminalMessage("Sampled ADC");
+        if (debugging)
+        {
+            // adc_debug_message = TerminalMessage("Sampled ADC");
+            // printMessage(adc_debug_message);
+        }
 
-        printMessage(adc_debug_message);
-
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(1 / portTICK_PERIOD_MS);
     }
 }
 
-void simpleLogger(void *parameters)
+void sampleGPS(void *parameters)
 {
-    bool debugging = true;
     long initial_time;
 
     DataLoggerChannels channels;
-
-    xTaskCreatePinnedToCore(sampleADC, "Sample ADC", 5000, nullptr, 25, nullptr, 0);
-
     TerminalMessage message;
 
     while (1)
     {
-        //* 1. Get system_time
-        channels.time_stamp = SoM.system_time;
-
         //* 2. Get GPS
         initial_time = micros();
         if (gps.getHNRPVT() == true) // If setAutoHNRPVT was successful and new data is available
@@ -81,24 +81,80 @@ void simpleLogger(void *parameters)
             channels.speed = gps.hnrPVT.gSpeed;
             channels.heading = gps.hnrPVT.headVeh;
 
-            if (debugging)
-            {
-                message = TerminalMessage("Lat: " + String(gps.hnrPVT.lat) +
-                                              "\tLong: " + String(gps.hnrPVT.lon) +
-                                              "\tFix: " + String(gps.hnrPVT.gpsFix) +
-                                              "\tSpeed: " + String(gps.hnrPVT.gSpeed) +
-                                              "\tHeading: " + String(gps.hnrPVT.headVeh),
-                                          "LOG", INFO, micros(), micros() - initial_time);
+            message = TerminalMessage("Lat: " + String(gps.hnrPVT.lat) +
+                                          "\tLong: " + String(gps.hnrPVT.lon) +
+                                          "\tFix: " + String(gps.hnrPVT.gpsFix) +
+                                          "\tSpeed: " + String(gps.hnrPVT.gSpeed) +
+                                          "\tHeading: " + String(gps.hnrPVT.headVeh),
+                                      "LOG", INFO, micros(), micros() - initial_time);
 
-                printMessage(message);
-            }
+            printMessage(message);
         }
-
-        //* 3. Get IMU
-        //
     }
 
     //* 2. Sample IMU
+}
+
+void IRAM_ATTR imuInterrupt()
+{
+    // BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    // xSemaphoreGiveFromISR(logger.sample_imu_semaphore, &xHigherPriorityTaskWoken);
+}
+
+void sampleIMU(void *parameters)
+{
+    TerminalMessage message;
+
+    while (1)
+    {
+        // xSemaphoreTake(logger.sample_imu_semaphore, portMAX_DELAY);
+
+        long initial_time = micros();
+        if (!imu.readSensor())
+        {
+            message.body = "Sampled";
+        }
+        else
+        {
+            message.body = "";
+        }
+
+        // message.body += imu.getAccelX_mss();
+        // message.body += imu.getAccelX_mss();
+        // message.body += "\t";
+        // message.body += imu.getAccelY_mss();
+        // message.body += "\t";
+        // message.body += imu.getAccelZ_mss();
+        // message.body += "\t";
+        // message.body += imu.getGyroX_rads();
+        // message.body += "\t";
+        // message.body += imu.getGyroY_rads();
+        // message.body += "\t";
+        // message.body += imu.getGyroZ_rads();
+        // message.body += "\t";
+        // message.body += imu.getMagX_uT();
+        // message.body += "\t";
+        // message.body += imu.getMagY_uT();
+        // message.body += "\t";
+        // message.body += imu.getMagZ_uT();
+        // message.body += "\t";
+        // message.body += imu.getTemperature_C();
+
+        message.process_time = micros() - initial_time;
+        printMessage(message);
+    }
+}
+
+void simpleLogger(void *parameters)
+{
+    pinMode(IMU0_INT, PULLUP);
+    attachInterrupt(IMU0_INT, imuInterrupt, RISING);
+
+    xTaskCreatePinnedToCore(sampleADC, "Sample ADC", 5000, nullptr, 25, nullptr, 1);
+    xTaskCreatePinnedToCore(sampleGPS, "Sample GPS", 5000, nullptr, 3, nullptr, 1);
+    xTaskCreatePinnedToCore(sampleIMU, "Sample IMU", 5000, nullptr, 3, nullptr, 1);
+
+    vTaskDelete(nullptr);
 }
 
 //*************************** METHODS
