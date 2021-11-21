@@ -8,6 +8,9 @@ void simpleLogger(void *parameters);
 
 ESP_ERROR DataLogger::begin(DataLoggerSettings logger_settings)
 {
+    ESP_ERROR err;
+    TerminalMessage message;
+
     long initial_time;
 
     //* 1. Create file name
@@ -21,16 +24,22 @@ ESP_ERROR DataLogger::begin(DataLoggerSettings logger_settings)
     if (create_file.on_error)
         handleError(create_file.debug_message, "LOG");
 
-    printMessage("File created", "LOG");
+    message = TerminalMessage("File created");
+
+    printMessage(message);
 
     //* 3. Start simple logger
-
     xTaskCreatePinnedToCore(simpleLogger, "Simple Log", 10000, nullptr, 1, nullptr, 1);
+
+    return err;
 }
 
 // TODO: Figure out how tf im gonna get this shit to work lol
+
 void sampleADC(void *parameters)
 {
+    TerminalMessage adc_debug_message;
+
     while (1)
     {
         uint16_t raw_readings[NUM_ANALOG_INPUTS];
@@ -38,7 +47,11 @@ void sampleADC(void *parameters)
 
         adc.readChannels(8, UNIPOLAR_MODE, raw_readings, &temp_reading);
 
-        vTaskDelay(4 / portTICK_PERIOD_MS);
+        adc_debug_message = TerminalMessage("Sampled ADC");
+
+        printMessage(adc_debug_message);
+
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
@@ -49,7 +62,9 @@ void simpleLogger(void *parameters)
 
     DataLoggerChannels channels;
 
-    xTaskCreatePinnedToCore(sampleADC, "Sample ADC", 5000, nullptr, 2, nullptr, 0);
+    xTaskCreatePinnedToCore(sampleADC, "Sample ADC", 5000, nullptr, 25, nullptr, 0);
+
+    TerminalMessage message;
 
     while (1)
     {
@@ -68,12 +83,14 @@ void simpleLogger(void *parameters)
 
             if (debugging)
             {
-                terminal.printMessage(TerminalMessage("Lat: " + String(gps.hnrPVT.lat) +
-                                                          "\tLong: " + String(gps.hnrPVT.lon) +
-                                                          "\tFix: " + String(gps.hnrPVT.gpsFix) +
-                                                          "\tSpeed: " + String(gps.hnrPVT.gSpeed) +
-                                                          "\tHeading: " + String(gps.hnrPVT.headVeh),
-                                                      "LOG", INFO, micros(), micros() - initial_time));
+                message = TerminalMessage("Lat: " + String(gps.hnrPVT.lat) +
+                                              "\tLong: " + String(gps.hnrPVT.lon) +
+                                              "\tFix: " + String(gps.hnrPVT.gpsFix) +
+                                              "\tSpeed: " + String(gps.hnrPVT.gSpeed) +
+                                              "\tHeading: " + String(gps.hnrPVT.headVeh),
+                                          "LOG", INFO, micros(), micros() - initial_time);
+
+                printMessage(message);
             }
         }
 
@@ -120,8 +137,6 @@ ESP_ERROR DataLogger::createCSV(DataLoggerFile &file)
                           "battery_volts",
                           "3v3_rail",
                           "5v_rail");
-
-    printMessage(String(str_length), "LOG");
 
     ESP_ERROR create_file = emmc.writeFile(file.name, csv_header_str, str_length);
 

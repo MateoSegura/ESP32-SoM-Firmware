@@ -60,6 +60,7 @@ private:
         uint32_t size;
     };
 
+    //** RTOS
     //*** Variables
     DataLoggerSettings settings;
     DataLoggerFile csv_file;

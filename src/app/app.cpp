@@ -17,13 +17,20 @@ void Application::begin()
     // 2. Init System on Module
     SoM.initAll(DEBUGGING_ENABLED);
 
+    // 3. Register RTOS variables
+    initRTOS();
+
+    // 3. Init terminal output tasks for all other tasks
+    xTaskCreatePinnedToCore(terminalOutput, "Terminal", 10000, nullptr, 1, nullptr, 0);
+
     // 3. Init Carrier Board hardware
     ESP_ERROR init_gps = initGPS();
 
     if (init_gps.on_error)
         handleError(init_gps.debug_message, "APP");
 
-    printMessage("GPS Initialized", "APP");
+    TerminalMessage message = TerminalMessage("GPS Initialized", "APP", INFO, micros());
+    printMessage(message);
 
     // 3. Init Logger
     DataLoggerSettings logger_settings;
@@ -66,6 +73,35 @@ ESP_ERROR Application::initGPS()
     return err;
 }
 
+//******************************************************      RTOS DECLARATIONS
+ESP_ERROR Application::initRTOS()
+{
+    ESP_ERROR err;
+
+    ESP_ERROR terminal_rtos = terminalRTOS();
+    if (terminal_rtos.on_error)
+        return terminal_rtos;
+
+    return err;
+}
+
+ESP_ERROR Application::terminalRTOS()
+{
+    ESP_ERROR err;
+
+    app.debug_message_queue = xQueueCreate(app.debug_message_queue_length, sizeof(TerminalMessage)); // Queue
+    app.debug_message_queue_mutex = xSemaphoreCreateMutex();                                         // Mutex
+
+    if (app.debug_message_queue == NULL || app.debug_message_queue_mutex == NULL)
+    {
+        err.on_error = true;
+        err.debug_message = "Could not create Terminal messages queue objects.";
+    }
+
+    return err;
+}
+
+//******************************************************      I2C Test
 void i2cTest()
 {
     byte error, address;
