@@ -1,5 +1,5 @@
 #include "app.h"
-#include "utils.h"
+#include "utils/utils.h"
 
 SystemOnModule SoM;
 DataLogger logger;

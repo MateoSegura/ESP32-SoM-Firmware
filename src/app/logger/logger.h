@@ -1,6 +1,6 @@
 #pragma once
 
-#include "app/utils.h"
+#include "app//utils/utils.h"
 #include "app/som/som.h"
 #include <MovingAverageFilter.h>
 
