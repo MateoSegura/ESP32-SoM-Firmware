@@ -25,13 +25,13 @@ void Application::begin()
     xTaskCreatePinnedToCore(terminalOutput, "Terminal", 10000, nullptr, 1, nullptr, 0);
 
     // 3. Init Carrier Board hardware
-    ESP_ERROR init_gps = initGPS();
+    // ESP_ERROR init_gps = initGPS();
 
-    if (init_gps.on_error)
-        handleError(init_gps.debug_message, "APP");
+    // if (init_gps.on_error)
+    //     handleError(init_gps.debug_message, "APP");
 
-    TerminalMessage message = TerminalMessage("GPS Initialized", "APP", INFO, micros());
-    printMessage(message);
+    // TerminalMessage message = TerminalMessage("GPS Initialized", "APP", INFO, micros());
+    // printMessage(message);
 
     // 3. Init Logger
     DataLoggerSettings logger_settings;

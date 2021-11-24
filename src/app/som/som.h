@@ -8,7 +8,6 @@
 #include <ACAN2517FD.h>
 #include <Adafruit_NeoPixel.h>
 #include "SparkFun_Ublox_Arduino_Library.h"
-#include "mpu9250.h"
 
 extern SFE_UBLOX_GPS gps;
 extern SystemOnChip esp;

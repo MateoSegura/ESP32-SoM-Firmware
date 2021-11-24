@@ -95,10 +95,12 @@ void sampleGPS(void *parameters)
     //* 2. Sample IMU
 }
 
+int count;
+
 void IRAM_ATTR imuInterrupt()
 {
-    // BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    // xSemaphoreGiveFromISR(logger.sample_imu_semaphore, &xHigherPriorityTaskWoken);
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xSemaphoreGiveFromISR(logger.sample_imu_semaphore, &xHigherPriorityTaskWoken);
 }
 
 void sampleIMU(void *parameters)
@@ -109,39 +111,99 @@ void sampleIMU(void *parameters)
     {
         // xSemaphoreTake(logger.sample_imu_semaphore, portMAX_DELAY);
 
-        long initial_time = micros();
-        if (!imu.readSensor())
+        if (imu.readByte(0x68, INT_STATUS) & 0x01)
         {
-            message.body = "Sampled";
-        }
-        else
-        {
-            message.body = "";
-        }
+            long initial_time = micros();
 
-        // message.body += imu.getAccelX_mss();
-        // message.body += imu.getAccelX_mss();
-        // message.body += "\t";
-        // message.body += imu.getAccelY_mss();
-        // message.body += "\t";
-        // message.body += imu.getAccelZ_mss();
-        // message.body += "\t";
-        // message.body += imu.getGyroX_rads();
-        // message.body += "\t";
-        // message.body += imu.getGyroY_rads();
-        // message.body += "\t";
-        // message.body += imu.getGyroZ_rads();
-        // message.body += "\t";
-        // message.body += imu.getMagX_uT();
-        // message.body += "\t";
-        // message.body += imu.getMagY_uT();
-        // message.body += "\t";
-        // message.body += imu.getMagZ_uT();
-        // message.body += "\t";
-        // message.body += imu.getTemperature_C();
+            imu.delt_t = millis() - imu.count;
 
-        message.process_time = micros() - initial_time;
-        printMessage(message);
+            imu.readAccelData(imu.accelCount); // Read the x/y/z adc values
+            imu.readGyroData(imu.gyroCount);   // Read the x/y/z adc values
+            imu.readMagData(imu.magCount);     // Read the x/y/z adc values
+            imu.updateTime();
+
+            MahonyQuaternionUpdate(imu.ax, imu.ay, imu.az, imu.gx * DEG_TO_RAD,
+                                   imu.gy * DEG_TO_RAD, imu.gz * DEG_TO_RAD, imu.my,
+                                   imu.mx, imu.mz, imu.deltat);
+
+            imu.yaw = atan2(2.0f * (*(getQ() + 1) * *(getQ() + 2) + *getQ() * *(getQ() + 3)), *getQ() * *getQ() + *(getQ() + 1) * *(getQ() + 1) - *(getQ() + 2) * *(getQ() + 2) - *(getQ() + 3) * *(getQ() + 3));
+            imu.pitch = -asin(2.0f * (*(getQ() + 1) * *(getQ() + 3) - *getQ() * *(getQ() + 2)));
+            imu.roll = atan2(2.0f * (*getQ() * *(getQ() + 1) + *(getQ() + 2) * *(getQ() + 3)), *getQ() * *getQ() - *(getQ() + 1) * *(getQ() + 1) - *(getQ() + 2) * *(getQ() + 2) + *(getQ() + 3) * *(getQ() + 3));
+            imu.pitch *= RAD_TO_DEG;
+            imu.yaw *= RAD_TO_DEG;
+
+            // Declination of SparkFun Electronics (40°05'26.6"N 105°11'05.9"W) is
+            // 	8° 30' E  ± 0° 21' (or 8.5°) on 2016-07-19
+            // - http://www.ngdc.noaa.gov/geomag-web/#declination
+            imu.yaw -= 8.5;
+            imu.roll *= RAD_TO_DEG;
+
+            imu.count = millis();
+            imu.sumCount = 0;
+            imu.sum = 0;
+
+            esp.uart0.print("ax = ");
+            esp.uart0.print((int)1000 * imu.ax);
+            esp.uart0.print(" ay = ");
+            esp.uart0.print((int)1000 * imu.ay);
+            esp.uart0.print(" az = ");
+            esp.uart0.print((int)1000 * imu.az);
+            esp.uart0.println(" mg");
+
+            esp.uart0.print("gx = ");
+            esp.uart0.print(imu.gx, 2);
+            esp.uart0.print(" gy = ");
+            esp.uart0.print(imu.gy, 2);
+            esp.uart0.print(" gz = ");
+            esp.uart0.print(imu.gz, 2);
+            esp.uart0.println(" deg/s");
+
+            esp.uart0.print("mx = ");
+            esp.uart0.print((int)imu.mx);
+            esp.uart0.print(" my = ");
+            esp.uart0.print((int)imu.my);
+            esp.uart0.print(" mz = ");
+            esp.uart0.print((int)imu.mz);
+            esp.uart0.println(" mG");
+
+            esp.uart0.print("q0 = ");
+            esp.uart0.print(*getQ());
+            esp.uart0.print(" qx = ");
+            esp.uart0.print(*(getQ() + 1));
+            esp.uart0.print(" qy = ");
+            esp.uart0.print(*(getQ() + 2));
+            esp.uart0.print(" qz = ");
+            esp.uart0.println(*(getQ() + 3));
+
+            esp.uart0.print("Yaw, Pitch, Roll: ");
+            esp.uart0.print(imu.yaw, 2);
+            esp.uart0.print(", ");
+            esp.uart0.print(imu.pitch, 2);
+            esp.uart0.print(", ");
+            esp.uart0.println(imu.roll, 2);
+
+            esp.uart0.print("rate = ");
+            esp.uart0.print((float)imu.sumCount / imu.sum, 2);
+            esp.uart0.println(" Hz");
+
+            // message.body = "accl_x";
+            // message.body += String(1000 * imu.ax);
+            // message.body += "accl_y";
+            // message.body += imu.ay;
+            // message.body += "accl_z";
+            // message.body += imu.az;
+
+            // message.body += "gyro_x";
+            // message.body += imu.gx;
+            // message.body += "gyro_y";
+            // message.body += imu.gy;
+            // message.body += "gyro_z";
+            // message.body += imu.gz;
+
+            // message.process_time = micros() - initial_time;
+
+            // printMessage(message);
+        }
     }
 }
 
@@ -150,9 +212,9 @@ void simpleLogger(void *parameters)
     pinMode(IMU0_INT, PULLUP);
     attachInterrupt(IMU0_INT, imuInterrupt, RISING);
 
-    xTaskCreatePinnedToCore(sampleADC, "Sample ADC", 5000, nullptr, 25, nullptr, 1);
-    xTaskCreatePinnedToCore(sampleGPS, "Sample GPS", 5000, nullptr, 3, nullptr, 1);
-    xTaskCreatePinnedToCore(sampleIMU, "Sample IMU", 5000, nullptr, 3, nullptr, 1);
+    // xTaskCreatePinnedToCore(sampleADC, "Sample ADC", 5000, nullptr, 25, nullptr, 1);
+    //  xTaskCreatePinnedToCore(sampleGPS, "Sample GPS", 5000, nullptr, 3, nullptr, 1);
+    xTaskCreatePinnedToCore(sampleIMU, "Sample IMU", 5000, nullptr, 1, nullptr, 0);
 
     vTaskDelete(nullptr);
 }

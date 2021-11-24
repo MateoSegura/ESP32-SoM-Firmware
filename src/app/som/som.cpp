@@ -9,8 +9,7 @@ SX1509 io_expansion;
 AD7689 adc;
 ACAN2517FD can(CAN0_CONTROLLER_CS_PIN, esp.hspi, CAN0_CONTROLLER_INT_PIN);
 Adafruit_NeoPixel pixels(2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-// MPU9250 imu(0x68, esp.i2c1, I2C0_CLK_FREQUENCY);
-MPU9250 imu(esp.i2c1, 0x68);
+MPU9250 imu(0x68, esp.i2c1, I2C1_CLK_FREQUENCY);
 SFE_UBLOX_GPS gps;
 
 void IRAM_ATTR updateSystemTime()
@@ -203,124 +202,91 @@ bool SystemOnModule::initIMU()
 
     esp.i2c1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, I2C1_CLK_FREQUENCY);
 
-    int readback = imu.begin();
+    byte readback = imu.readByte(0x68, WHO_AM_I_MPU9250);
 
-    if (!readback)
+    if (readback != 0x71)
     {
-        terminal.printMessage(TerminalMessage("Could not initialize imu",
+        terminal.printMessage(TerminalMessage("Error. Data should be : " + String(0x71, HEX) +
+                                                  ",data read: " + String(readback, HEX),
+                                              "IMU", ERROR, micros()));
+
+        return false;
+    }
+
+    imu.MPU9250SelfTest(imu.selfTest);
+    imu.calibrateMPU9250(imu.gyroBias, imu.accelBias);
+    imu.initMPU9250();
+
+    // Magnemometer
+    readback = imu.readByte(AK8963_ADDRESS, WHO_AM_I_AK8963);
+
+    if (readback != 0x48)
+    {
+        terminal.printMessage(TerminalMessage("Could not initialize magnemometer. Data should be : " +
+                                                  String(0x71, HEX) +
+                                                  ",data read: " + String(readback, HEX),
                                               "CAN", ERROR, micros()));
 
         return false;
     }
 
-    readback = imu.setAccelRange(MPU9250::ACCEL_RANGE_8G);
-    if (!readback)
-        return false;
-
-    readback = imu.setGyroRange(MPU9250::GYRO_RANGE_500DPS);
-    if (!readback)
-        return false;
-
-    readback = imu.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_20HZ);
-    if (!readback)
-        return false;
-
-    readback = imu.setSrd(24);
-    if (!readback)
-        return false;
-
-    readback = imu.enableDataReadyInterrupt();
-    if (!readback)
-        return false;
-
-    // readback = imu.calibrateAccel();
-    // if (!readback)
-    //     return false;
-
-    // readback = imu.calibrateGyro();
-    // if (!readback)
-    //     return false;
-
-    // readback = imu.calibrateMag();
-    // if (!readback)
-    //     return false;
+    imu.initAK8963(imu.factoryMagCalibration);
+    imu.getAres();
+    imu.getGres();
+    imu.getMres();
 
     if (debugging_enabled)
-        terminal.printMessage(TerminalMessage("IMU initialized",
-                                              "CAN", ERROR, micros(), micros() - initial_time));
+    {
+        terminal.printMessage(TerminalMessage("IMU initialized", "IMU", INFO, micros(),
+                                              micros() - initial_time));
+    }
 
-    // byte readback = imu.readByte(0x68, WHO_AM_I_MPU9250);
-
-    // if (readback != 0x71)
+    // if (!imu.enabledReadbackInt())
     // {
-    //     terminal.printMessage(TerminalMessage("Could not initialize imu. Data should be : " + String(0x71, HEX) +
-    //                                               ",data read: " + String(readback, HEX),
-    //                                           "CAN", ERROR, micros()));
-
+    //     terminal.printMessage(TerminalMessage("Could not set readback interrupt", "IMU", INFO, micros(),
+    //                                           micros() - initial_time));
     //     return false;
     // }
 
-    // imu.MPU9250SelfTest(imu.selfTest);
-    // imu.calibrateMPU9250(imu.gyroBias, imu.accelBias);
-    // imu.initMPU9250();
-
-    // // Magnemometer
-    // readback = imu.readByte(AK8963_ADDRESS, WHO_AM_I_AK8963);
-
-    // if (readback != 0x48)
-    // {
-    //     terminal.printMessage(TerminalMessage("Could not initialize magnemometer. Data should be : " +
-    //                                               String(0x71, HEX) +
-    //                                               ",data read: " + String(readback, HEX),
-    //                                           "CAN", ERROR, micros()));
-
-    //     return false;
-    // }
-
-    // imu.initAK8963(imu.factoryMagCalibration);
-    // imu.getAres();
-    // imu.getGres();
-    // imu.getMres();
-
-    // // esp.uart0.print(F("x-axis self test: acceleration trim within : "));
-    // // esp.uart0.print(imu.selfTest[0], 1);
-    // // esp.uart0.println("% of factory value");
-    // // esp.uart0.print(F("y-axis self test: acceleration trim within : "));
-    // // esp.uart0.print(imu.selfTest[1], 1);
-    // // esp.uart0.println("% of factory value");
-    // // esp.uart0.print(F("z-axis self test: acceleration trim within : "));
-    // // esp.uart0.print(imu.selfTest[2], 1);
-    // // esp.uart0.println("% of factory value");
-    // // esp.uart0.print(F("x-axis self test: gyration trim within : "));
-    // // esp.uart0.print(imu.selfTest[3], 1);
-    // // esp.uart0.println("% of factory value");
-    // // esp.uart0.print(F("y-axis self test: gyration trim within : "));
-    // // esp.uart0.print(imu.selfTest[4], 1);
-    // // esp.uart0.println("% of factory value");
-    // // esp.uart0.print(F("z-axis self test: gyration trim within : "));
-    // // esp.uart0.print(imu.selfTest[5], 1);
-    // // esp.uart0.println("% of factory value");
-    // // esp.uart0.print("X-Axis factory sensitivity adjustment value ");
-    // // esp.uart0.println(imu.factoryMagCalibration[0], 2);
-    // // esp.uart0.print("Y-Axis factory sensitivity adjustment value ");
-    // // esp.uart0.println(imu.factoryMagCalibration[1], 2);
-    // // esp.uart0.print("Z-Axis factory sensitivity adjustment value ");
-    // // esp.uart0.println(imu.factoryMagCalibration[2], 2);
-    // // esp.uart0.println("AK8963 mag biases (mG)");
-    // // esp.uart0.println(imu.magBias[0]);
-    // // esp.uart0.println(imu.magBias[1]);
-    // // esp.uart0.println(imu.magBias[2]);
-    // // esp.uart0.println("AK8963 mag scale (mG)");
-    // // esp.uart0.println(imu.magScale[0]);
-    // // esp.uart0.println(imu.magScale[1]);
-    // // esp.uart0.println(imu.magScale[2]);
-    // // esp.uart0.println("Magnetometer:");
-    // // esp.uart0.print("X-Axis sensitivity adjustment value ");
-    // // esp.uart0.println(imu.factoryMagCalibration[0], 2);
-    // // esp.uart0.print("Y-Axis sensitivity adjustment value ");
-    // // esp.uart0.println(imu.factoryMagCalibration[1], 2);
-    // // esp.uart0.print("Z-Axis sensitivity adjustment value ");
-    // // esp.uart0.println(imu.factoryMagCalibration[2], 2);
+    esp.uart0.print(F("x-axis self test: acceleration trim within : "));
+    esp.uart0.print(imu.selfTest[0], 1);
+    esp.uart0.println("% of factory value");
+    esp.uart0.print(F("y-axis self test: acceleration trim within : "));
+    esp.uart0.print(imu.selfTest[1], 1);
+    esp.uart0.println("% of factory value");
+    esp.uart0.print(F("z-axis self test: acceleration trim within : "));
+    esp.uart0.print(imu.selfTest[2], 1);
+    esp.uart0.println("% of factory value");
+    esp.uart0.print(F("x-axis self test: gyration trim within : "));
+    esp.uart0.print(imu.selfTest[3], 1);
+    esp.uart0.println("% of factory value");
+    esp.uart0.print(F("y-axis self test: gyration trim within : "));
+    esp.uart0.print(imu.selfTest[4], 1);
+    esp.uart0.println("% of factory value");
+    esp.uart0.print(F("z-axis self test: gyration trim within : "));
+    esp.uart0.print(imu.selfTest[5], 1);
+    esp.uart0.println("% of factory value");
+    esp.uart0.print("X-Axis factory sensitivity adjustment value ");
+    esp.uart0.println(imu.factoryMagCalibration[0], 2);
+    esp.uart0.print("Y-Axis factory sensitivity adjustment value ");
+    esp.uart0.println(imu.factoryMagCalibration[1], 2);
+    esp.uart0.print("Z-Axis factory sensitivity adjustment value ");
+    esp.uart0.println(imu.factoryMagCalibration[2], 2);
+    esp.uart0.println("AK8963 mag biases (mG)");
+    esp.uart0.println(imu.magBias[0]);
+    esp.uart0.println(imu.magBias[1]);
+    esp.uart0.println(imu.magBias[2]);
+    esp.uart0.println("AK8963 mag scale (mG)");
+    esp.uart0.println(imu.magScale[0]);
+    esp.uart0.println(imu.magScale[1]);
+    esp.uart0.println(imu.magScale[2]);
+    esp.uart0.println("Magnetometer:");
+    esp.uart0.print("X-Axis sensitivity adjustment value ");
+    esp.uart0.println(imu.factoryMagCalibration[0], 2);
+    esp.uart0.print("Y-Axis sensitivity adjustment value ");
+    esp.uart0.println(imu.factoryMagCalibration[1], 2);
+    esp.uart0.print("Z-Axis sensitivity adjustment value ");
+    esp.uart0.println(imu.factoryMagCalibration[2], 2);
 
     return true;
 }
