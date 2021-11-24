@@ -9,7 +9,8 @@ SX1509 io_expansion;
 AD7689 adc;
 ACAN2517FD can(CAN0_CONTROLLER_CS_PIN, esp.hspi, CAN0_CONTROLLER_INT_PIN);
 Adafruit_NeoPixel pixels(2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-MPU9250 imu(0x68, esp.i2c1, I2C1_CLK_FREQUENCY);
+// MPU9250 imu(0x68, esp.i2c1, I2C1_CLK_FREQUENCY);
+Adafruit_BME680 bme(&esp.i2c1);
 SFE_UBLOX_GPS gps;
 
 void IRAM_ATTR updateSystemTime()
@@ -45,6 +46,8 @@ void SystemOnModule::initAll(bool debug_enabled)
     if (!initIOExpansion())
         onBootError();
 
+    initLED();
+
     if (!initRTC())
         onBootError();
 
@@ -54,16 +57,18 @@ void SystemOnModule::initAll(bool debug_enabled)
     if (!initCAN())
         onBootError();
 
-    if (!initEMMC())
+    if (!initMMC())
         onBootError();
 
-    if (!initIMU())
-        onBootError();
+    // if (!initIMU())
+    //     onBootError();
+
+    // if (!initBME())
+    //     onBootError();
 
     // TODO: Init Env. sensor
 
-    initTimers();
-    initLED();
+    // initTimers();
 
     terminal.printMessage(TerminalMessage("Boot time: " + String(millis() - initial_time) + " mS", "SOM", INFO, micros()));
 }
@@ -104,6 +109,9 @@ bool SystemOnModule::initIOExpansion()
 
     io_expansion.pinMode(CAN0_EN_PIN, OUTPUT);
     io_expansion.digitalWrite(CAN0_EN_PIN, LOW); // CAN
+
+    io_expansion.pinMode(IMU_EN_PIN, OUTPUT);
+    io_expansion.digitalWrite(IMU_EN_PIN, LOW); // CAN
 
     terminal.printMessage(TerminalMessage("All systems enabled", "I/O", INFO, micros()));
 
@@ -196,102 +204,126 @@ bool SystemOnModule::initCAN()
     return true;
 }
 
-bool SystemOnModule::initIMU()
+// bool SystemOnModule::initIMU()
+// {
+//     long initial_time = micros();
+
+//     esp.i2c1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, I2C1_CLK_FREQUENCY);
+
+//     byte readback = imu.readByte(0x68, WHO_AM_I_MPU9250);
+
+//     if (readback != 0x71)
+//     {
+//         terminal.printMessage(TerminalMessage("Error. Data should be : " + String(0x71, HEX) +
+//                                                   ",data read: " + String(readback, HEX),
+//                                               "IMU", ERROR, micros()));
+
+//         return false;
+//     }
+
+//     imu.MPU9250SelfTest(imu.selfTest);
+//     imu.calibrateMPU9250(imu.gyroBias, imu.accelBias);
+//     imu.initMPU9250();
+
+//     // Magnemometer
+//     readback = imu.readByte(AK8963_ADDRESS, WHO_AM_I_AK8963);
+
+//     if (readback != 0x48)
+//     {
+//         terminal.printMessage(TerminalMessage("Could not initialize magnemometer. Data should be : " +
+//                                                   String(0x71, HEX) +
+//                                                   ",data read: " + String(readback, HEX),
+//                                               "CAN", ERROR, micros()));
+
+//         return false;
+//     }
+
+//     imu.initAK8963(imu.factoryMagCalibration);
+//     imu.getAres();
+//     imu.getGres();
+//     imu.getMres();
+
+//     if (debugging_enabled)
+//     {
+//         terminal.printMessage(TerminalMessage("IMU initialized", "IMU", INFO, micros(),
+//                                               micros() - initial_time));
+//     }
+
+//     // if (!imu.enabledReadbackInt())
+//     // {
+//     //     terminal.printMessage(TerminalMessage("Could not set readback interrupt", "IMU", INFO, micros(),
+//     //                                           micros() - initial_time));
+//     //     return false;
+//     // }
+
+//     // esp.uart0.print(F("x-axis self test: acceleration trim within : "));
+//     // esp.uart0.print(imu.selfTest[0], 1);
+//     // esp.uart0.println("% of factory value");
+//     // esp.uart0.print(F("y-axis self test: acceleration trim within : "));
+//     // esp.uart0.print(imu.selfTest[1], 1);
+//     // esp.uart0.println("% of factory value");
+//     // esp.uart0.print(F("z-axis self test: acceleration trim within : "));
+//     // esp.uart0.print(imu.selfTest[2], 1);
+//     // esp.uart0.println("% of factory value");
+//     // esp.uart0.print(F("x-axis self test: gyration trim within : "));
+//     // esp.uart0.print(imu.selfTest[3], 1);
+//     // esp.uart0.println("% of factory value");
+//     // esp.uart0.print(F("y-axis self test: gyration trim within : "));
+//     // esp.uart0.print(imu.selfTest[4], 1);
+//     // esp.uart0.println("% of factory value");
+//     // esp.uart0.print(F("z-axis self test: gyration trim within : "));
+//     // esp.uart0.print(imu.selfTest[5], 1);
+//     // esp.uart0.println("% of factory value");
+//     // esp.uart0.print("X-Axis factory sensitivity adjustment value ");
+//     // esp.uart0.println(imu.factoryMagCalibration[0], 2);
+//     // esp.uart0.print("Y-Axis factory sensitivity adjustment value ");
+//     // esp.uart0.println(imu.factoryMagCalibration[1], 2);
+//     // esp.uart0.print("Z-Axis factory sensitivity adjustment value ");
+//     // esp.uart0.println(imu.factoryMagCalibration[2], 2);
+//     // esp.uart0.println("AK8963 mag biases (mG)");
+//     // esp.uart0.println(imu.magBias[0]);
+//     // esp.uart0.println(imu.magBias[1]);
+//     // esp.uart0.println(imu.magBias[2]);
+//     // esp.uart0.println("AK8963 mag scale (mG)");
+//     // esp.uart0.println(imu.magScale[0]);
+//     // esp.uart0.println(imu.magScale[1]);
+//     // esp.uart0.println(imu.magScale[2]);
+//     // esp.uart0.println("Magnetometer:");
+//     // esp.uart0.print("X-Axis sensitivity adjustment value ");
+//     // esp.uart0.println(imu.factoryMagCalibration[0], 2);
+//     // esp.uart0.print("Y-Axis sensitivity adjustment value ");
+//     // esp.uart0.println(imu.factoryMagCalibration[1], 2);
+//     // esp.uart0.print("Z-Axis sensitivity adjustment value ");
+//     // esp.uart0.println(imu.factoryMagCalibration[2], 2);
+
+//     return true;
+// }
+
+bool SystemOnModule::initBME()
 {
     long initial_time = micros();
 
-    esp.i2c1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, I2C1_CLK_FREQUENCY);
-
-    byte readback = imu.readByte(0x68, WHO_AM_I_MPU9250);
-
-    if (readback != 0x71)
+    if (!bme.begin())
     {
-        terminal.printMessage(TerminalMessage("Error. Data should be : " + String(0x71, HEX) +
-                                                  ",data read: " + String(readback, HEX),
+        terminal.printMessage(TerminalMessage("Could not initialize BME688",
                                               "IMU", ERROR, micros()));
 
         return false;
     }
 
-    imu.MPU9250SelfTest(imu.selfTest);
-    imu.calibrateMPU9250(imu.gyroBias, imu.accelBias);
-    imu.initMPU9250();
+    bme.setTemperatureOversampling(BME680_OS_8X);
+    bme.setHumidityOversampling(BME680_OS_2X);
+    bme.setPressureOversampling(BME680_OS_4X);
+    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
+    bme.setGasHeater(320, 150); // 320*C for 150 ms
 
-    // Magnemometer
-    readback = imu.readByte(AK8963_ADDRESS, WHO_AM_I_AK8963);
-
-    if (readback != 0x48)
-    {
-        terminal.printMessage(TerminalMessage("Could not initialize magnemometer. Data should be : " +
-                                                  String(0x71, HEX) +
-                                                  ",data read: " + String(readback, HEX),
-                                              "CAN", ERROR, micros()));
-
-        return false;
-    }
-
-    imu.initAK8963(imu.factoryMagCalibration);
-    imu.getAres();
-    imu.getGres();
-    imu.getMres();
-
-    if (debugging_enabled)
-    {
-        terminal.printMessage(TerminalMessage("IMU initialized", "IMU", INFO, micros(),
-                                              micros() - initial_time));
-    }
-
-    // if (!imu.enabledReadbackInt())
-    // {
-    //     terminal.printMessage(TerminalMessage("Could not set readback interrupt", "IMU", INFO, micros(),
-    //                                           micros() - initial_time));
-    //     return false;
-    // }
-
-    esp.uart0.print(F("x-axis self test: acceleration trim within : "));
-    esp.uart0.print(imu.selfTest[0], 1);
-    esp.uart0.println("% of factory value");
-    esp.uart0.print(F("y-axis self test: acceleration trim within : "));
-    esp.uart0.print(imu.selfTest[1], 1);
-    esp.uart0.println("% of factory value");
-    esp.uart0.print(F("z-axis self test: acceleration trim within : "));
-    esp.uart0.print(imu.selfTest[2], 1);
-    esp.uart0.println("% of factory value");
-    esp.uart0.print(F("x-axis self test: gyration trim within : "));
-    esp.uart0.print(imu.selfTest[3], 1);
-    esp.uart0.println("% of factory value");
-    esp.uart0.print(F("y-axis self test: gyration trim within : "));
-    esp.uart0.print(imu.selfTest[4], 1);
-    esp.uart0.println("% of factory value");
-    esp.uart0.print(F("z-axis self test: gyration trim within : "));
-    esp.uart0.print(imu.selfTest[5], 1);
-    esp.uart0.println("% of factory value");
-    esp.uart0.print("X-Axis factory sensitivity adjustment value ");
-    esp.uart0.println(imu.factoryMagCalibration[0], 2);
-    esp.uart0.print("Y-Axis factory sensitivity adjustment value ");
-    esp.uart0.println(imu.factoryMagCalibration[1], 2);
-    esp.uart0.print("Z-Axis factory sensitivity adjustment value ");
-    esp.uart0.println(imu.factoryMagCalibration[2], 2);
-    esp.uart0.println("AK8963 mag biases (mG)");
-    esp.uart0.println(imu.magBias[0]);
-    esp.uart0.println(imu.magBias[1]);
-    esp.uart0.println(imu.magBias[2]);
-    esp.uart0.println("AK8963 mag scale (mG)");
-    esp.uart0.println(imu.magScale[0]);
-    esp.uart0.println(imu.magScale[1]);
-    esp.uart0.println(imu.magScale[2]);
-    esp.uart0.println("Magnetometer:");
-    esp.uart0.print("X-Axis sensitivity adjustment value ");
-    esp.uart0.println(imu.factoryMagCalibration[0], 2);
-    esp.uart0.print("Y-Axis sensitivity adjustment value ");
-    esp.uart0.println(imu.factoryMagCalibration[1], 2);
-    esp.uart0.print("Z-Axis sensitivity adjustment value ");
-    esp.uart0.println(imu.factoryMagCalibration[2], 2);
+    terminal.printMessage(TerminalMessage("BME initialized",
+                                          "IMU", ERROR, micros(), micros() - initial_time));
 
     return true;
 }
 
-bool SystemOnModule::initEMMC()
+bool SystemOnModule::initMMC()
 {
     long initial_time = micros();
     ESP_ERROR initialize_emmc = emmc.begin(-1, -1, eMMC_MODE, MODE_1_BIT);

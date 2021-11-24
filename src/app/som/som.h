@@ -8,6 +8,8 @@
 #include <ACAN2517FD.h>
 #include <Adafruit_NeoPixel.h>
 #include "SparkFun_Ublox_Arduino_Library.h"
+#include <Adafruit_Sensor.h>
+#include "Adafruit_BME680.h"
 
 extern SFE_UBLOX_GPS gps;
 extern SystemOnChip esp;
@@ -18,8 +20,9 @@ extern RealTimeClock rtc;
 extern SX1509 io_expansion;
 extern AD7689 adc;
 extern ACAN2517FD can;
-extern MPU9250 imu;
+// extern MPU9250 imu;
 extern Adafruit_NeoPixel pixels;
+extern Adafruit_BME680 bme;
 
 class SystemOnModule
 {
@@ -38,7 +41,8 @@ public:
     bool initADC();
     bool initCAN();
     bool initIMU();
-    bool initEMMC();
+    bool initBME();
+    bool initMMC();
     void initLED();
 
     void initTimers();
@@ -46,7 +50,7 @@ public:
 protected:
     bool debugging_enabled;
 
-private:
+public:
     void onBootError();
 };
 

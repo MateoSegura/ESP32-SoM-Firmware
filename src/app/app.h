@@ -2,6 +2,7 @@
 
 #include "som/som.h"
 #include "logger/logger.h"
+#include <MPU9250.h>
 
 //******************************************************      Data Logger Settings
 #define NUMBER_OF_CHANNELS 8
@@ -9,6 +10,8 @@
 #define MICROS_TIMESTAMP_ENABLED false
 #define SYSTEM_TIME_ENABLED true
 #define DEBUGGING_ENABLED true
+
+extern MPU9250 mpu;
 
 //******************************************************      Application Class
 class Application
@@ -27,4 +30,5 @@ public:
 
     ESP_ERROR initGPS();
 };
+
 extern Application app;

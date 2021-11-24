@@ -3,6 +3,7 @@
 
 SystemOnModule SoM;
 DataLogger logger;
+MPU9250 mpu;
 
 void i2cTest();
 
@@ -20,6 +21,23 @@ void Application::begin()
 
     // 3. Register RTOS variables
     initRTOS();
+
+    esp.i2c1.begin(I2C1_SDA_PIN, I2C1_SCL_PIN, I2C1_CLK_FREQUENCY);
+
+    MPU9250Setting setting;
+    setting.accel_fs_sel = ACCEL_FS_SEL::A16G;
+    setting.gyro_fs_sel = GYRO_FS_SEL::G2000DPS;
+    setting.mag_output_bits = MAG_OUTPUT_BITS::M16BITS;
+    setting.fifo_sample_rate = FIFO_SAMPLE_RATE::SMPL_500HZ;
+    setting.gyro_fchoice = 0x03;
+    setting.gyro_dlpf_cfg = GYRO_DLPF_CFG::DLPF_41HZ;
+    setting.accel_fchoice = 0x01;
+    setting.accel_dlpf_cfg = ACCEL_DLPF_CFG::DLPF_45HZ;
+
+    if (!mpu.setup(0x68, setting, esp.i2c1))
+    {
+        SoM.onBootError();
+    }
 
     // 3. Init terminal output tasks for all other tasks
     xTaskCreatePinnedToCore(terminalOutput, "Terminal", 10000, nullptr, 1, nullptr, 0);
