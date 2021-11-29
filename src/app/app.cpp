@@ -39,8 +39,13 @@ void Application::begin()
         SoM.onBootError();
     }
 
+    while (1)
+    {
+        i2cTest();
+    }
+
     // 3. Init terminal output tasks for all other tasks
-    xTaskCreatePinnedToCore(terminalOutput, "Terminal", 10000, nullptr, 1, nullptr, 0);
+    // xTaskCreatePinnedToCore(terminalOutput, "Terminal", 10000, nullptr, 1, nullptr, 0);
 
     // 3. Init Carrier Board hardware
     // ESP_ERROR init_gps = initGPS();
@@ -52,10 +57,10 @@ void Application::begin()
     // printMessage(message);
 
     // 3. Init Logger
-    DataLoggerSettings logger_settings;
-    logger_settings.frequency = DataLoggerSettings::_50_Hz;
+    // DataLoggerSettings logger_settings;
+    // logger_settings.frequency = DataLoggerSettings::_50_Hz;
 
-    logger.begin(logger_settings);
+    // logger.begin(logger_settings);
 }
 
 ESP_ERROR Application::initGPS()
