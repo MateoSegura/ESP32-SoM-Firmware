@@ -13,8 +13,6 @@ ESP_ERROR DataLogger::begin(DataLoggerSettings logger_settings)
     ESP_ERROR err;
     TerminalMessage message;
 
-    long initial_time;
-
     //* 1. Register RTOS
     sample_imu_semaphore = xSemaphoreCreateBinary();
 
@@ -23,7 +21,6 @@ ESP_ERROR DataLogger::begin(DataLoggerSettings logger_settings)
     csv_file.time = SoM.system_time;
 
     //* 2. Create .csv file in memory
-    initial_time = micros();
     ESP_ERROR create_file = createCSV(csv_file);
 
     if (create_file.on_error)
@@ -113,13 +110,13 @@ void sampleIMU(void *parameters)
 
         long initial_time = micros();
 
-        if (mpu.update())
+        if (imu.update())
         {
-            esp.uart0.print(mpu.getAccX());
+            esp.uart0.print(imu.getAccX());
             esp.uart0.print(", ");
-            esp.uart0.print(mpu.getAccY());
+            esp.uart0.print(imu.getAccY());
             esp.uart0.print(", ");
-            esp.uart0.print(mpu.getAccZ());
+            esp.uart0.print(imu.getAccZ());
             esp.uart0.print("\t");
             esp.uart0.println((micros() - initial_time) / 1000);
         }

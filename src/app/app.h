@@ -1,8 +1,7 @@
 #pragma once
 
-#include "som/som.h"
 #include "logger/logger.h"
-#include <MPU9250.h>
+#include "som/som.h"
 
 //******************************************************      Data Logger Settings
 #define NUMBER_OF_CHANNELS 8
@@ -11,7 +10,7 @@
 #define SYSTEM_TIME_ENABLED true
 #define DEBUGGING_ENABLED true
 
-extern MPU9250 mpu;
+
 
 //******************************************************      Application Class
 class Application

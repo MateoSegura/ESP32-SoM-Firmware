@@ -20,7 +20,7 @@ extern RealTimeClock rtc;
 extern SX1509 io_expansion;
 extern AD7689 adc;
 extern ACAN2517FD can;
-// extern MPU9250 imu;
+extern MPU9250 imu;
 extern Adafruit_NeoPixel pixels;
 extern Adafruit_BME680 bme;
 
