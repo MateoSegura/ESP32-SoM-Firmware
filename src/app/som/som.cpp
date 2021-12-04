@@ -18,7 +18,7 @@ void IRAM_ATTR updateSystemTime()
     rtc.updateMillisecondsCounter(SoM.system_time);
 }
 
-void SystemOnModule::onBootError()
+void SystemOnModule::bootError()
 {
     SoM.initLED();
     pixels.setPixelColor(0, pixels.Color(100, 0, 0));
@@ -44,29 +44,28 @@ void SystemOnModule::initAll(bool debug_enabled)
         debugging_enabled = true;
 
     if (!initIOExpansion())
-        onBootError();
-
-    initLED();
+        bootError();
 
     if (!initRTC())
-        onBootError();
+        bootError();
 
     if (!initADC())
-        onBootError();
+        bootError();
 
     if (!initCAN())
-        onBootError();
+        bootError();
 
     if (!initMMC())
-        onBootError();
+        bootError();
 
     if (!initIMU())
-        onBootError();
+        bootError();
 
     if (!initBME())
-        onBootError();
+        bootError();
 
     initTimers();
+    initLED();
 
     terminal.printMessage(TerminalMessage("Boot time: " + String(millis() - initial_time) + " mS", "SOM", INFO, micros()));
 }

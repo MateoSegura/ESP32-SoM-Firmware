@@ -12,6 +12,7 @@
 #include "Adafruit_BME680.h"
 
 extern SFE_UBLOX_GPS gps;
+
 extern SystemOnChip esp;
 extern Terminal terminal;
 extern EMMC_Memory emmc;
@@ -51,7 +52,7 @@ protected:
     bool debugging_enabled;
 
 public:
-    void onBootError();
+    void bootError();
 };
 
 extern SystemOnModule SoM;
