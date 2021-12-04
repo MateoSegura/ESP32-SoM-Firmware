@@ -9,7 +9,7 @@ SX1509 io_expansion;
 AD7689 adc;
 ACAN2517FD can(CAN0_CONTROLLER_CS_PIN, esp.hspi, CAN0_CONTROLLER_INT_PIN);
 Adafruit_NeoPixel pixels(2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-MPU9250 mpu;
+MPU9250 imu;
 Adafruit_BME680 bme(&esp.i2c1);
 SFE_UBLOX_GPS gps;
 
@@ -217,13 +217,17 @@ bool SystemOnModule::initIMU()
     setting.accel_fchoice = 0x01;
     setting.accel_dlpf_cfg = ACCEL_DLPF_CFG::DLPF_45HZ;
 
-    if (!mpu.setup(0x68, setting, esp.i2c1))
+    if (!imu.setup(0x68, setting, esp.i2c1))
     {
         terminal.printMessage(TerminalMessage("Could not initialize MPU9250",
                                               "IMU", ERROR, micros()));
 
         return false;
     }
+
+    if (debugging_enabled)
+        terminal.printMessage(TerminalMessage("IMU initialized", "IMU", INFO, micros(),
+                                              micros() - initial_time));
 
     return true;
 }
@@ -232,7 +236,7 @@ bool SystemOnModule::initBME()
 {
     long initial_time = micros();
 
-    if (!bme.begin())
+    if (!bme.begin(0x76))
     {
         terminal.printMessage(TerminalMessage("Could not initialize BME688",
                                               "IMU", ERROR, micros()));

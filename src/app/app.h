@@ -1,7 +1,7 @@
 #pragma once
 
 #include "logger/logger.h"
-#include "som/som.h"
+#include "bootloader/som.h"
 
 //******************************************************      Data Logger Settings
 #define NUMBER_OF_CHANNELS 8
@@ -10,7 +10,7 @@
 #define SYSTEM_TIME_ENABLED true
 #define DEBUGGING_ENABLED true
 
-
+void i2cTest();
 
 //******************************************************      Application Class
 class Application

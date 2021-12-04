@@ -4,8 +4,6 @@
 SystemOnModule SoM;
 DataLogger logger;
 
-void i2cTest();
-
 void Application::begin()
 {
     // 1. Begin esp.uart0 port for debugging
@@ -20,13 +18,13 @@ void Application::begin()
     initRTOS();
 
     // 4. Init Carrier Board hardware
-    ESP_ERROR init_gps = initGPS();
+    // ESP_ERROR init_gps = initGPS();
 
-    if (init_gps.on_error)
-        handleError(init_gps.debug_message, "APP");
+    // if (init_gps.on_error)
+    //     handleError(init_gps.debug_message, "APP");
 
-    TerminalMessage message = TerminalMessage("GPS Initialized", "APP", INFO, micros());
-    printMessage(message);
+    // TerminalMessage message = TerminalMessage("GPS Initialized", "APP", INFO, micros());
+    // printMessage(message);
 
     // 5. Init terminal task used by other tasks
     xTaskCreatePinnedToCore(terminalOutput, "Terminal", 10000, nullptr, 1, nullptr, 0);
@@ -39,6 +37,7 @@ void Application::begin()
     logger.begin(logger_settings);
 }
 
+//******************************************************      Carrier Board Hardware
 ESP_ERROR Application::initGPS()
 {
     ESP_ERROR err;
@@ -73,7 +72,7 @@ ESP_ERROR Application::initGPS()
     return err;
 }
 
-//******************************************************      RTOS DECLARATIONS
+//******************************************************      RTOS Variables
 ESP_ERROR Application::initRTOS()
 {
     ESP_ERROR err;
@@ -101,7 +100,7 @@ ESP_ERROR Application::terminalRTOS()
     return err;
 }
 
-//******************************************************      I2C Test
+//******************************************************      Hardware Tests
 void i2cTest()
 {
     byte error, address;

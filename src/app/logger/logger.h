@@ -50,8 +50,10 @@ class DataLogger
 {
 public:
     ESP_ERROR begin(DataLoggerSettings logger_settings);
+
     //** RTOS
     SemaphoreHandle_t sample_imu_semaphore;
+    QueueHandle_t data_samples_queue;
 
 private:
     struct DataLoggerFile
